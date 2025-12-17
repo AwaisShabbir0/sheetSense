@@ -19,21 +19,21 @@ const ShareSection = () => {
                     <SocialButton
                         icon={<Instagram size={24} />}
                         label="Follow on Instagram"
-                        href="https://www.instagram.com/sheet_sense"
+                        href="https://www.instagram.com/x_.awaisss_?igsh=MXF0YWQ5dGNlaWNzZQ%3D%3D&utm_source=qr"
                         gradient="from-[#833AB4] via-[#FD1D1D] to-[#F77737]"
                         delay={0}
                     />
                     <SocialButton
                         icon={<MessageCircle size={24} />}
                         label="Chat on WhatsApp"
-                        href="https://wa.me/923000000000"
+                        href="https://whatsapp.com/biz/"
                         color="bg-[#25D366]"
                         delay={0.2}
                     />
                     <SocialButton
                         icon={<Linkedin size={24} />}
                         label="Connect on LinkedIn"
-                        href="https://www.linkedin.com/company/sheetsense"
+                        href="https://www.linkedin.com/in/awais-shabbir-971180277?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=ios_app"
                         color="bg-[#0077B5]"
                         delay={0.4}
                     />
