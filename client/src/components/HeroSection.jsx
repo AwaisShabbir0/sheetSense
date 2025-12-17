@@ -166,7 +166,7 @@ const HeroSection = () => {
                         </button>
                         <video
                             className="w-full h-full object-cover"
-                            src="https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4"
+                            src="/videos/ScreenRecorderProject1.mp4"
                             controls
                             autoPlay
                         ></video>
