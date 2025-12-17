@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, MapPin } from 'lucide-react';
+import { Mail, MapPin, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import emailjs from '@emailjs/browser';
 
 const ContactSection = () => {
     const [formData, setFormData] = useState({
@@ -9,11 +10,41 @@ const ContactSection = () => {
         message: ''
     });
 
-    const handleSubmit = (e) => {
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitStatus, setSubmitStatus] = useState(null); // 'success' | 'error' | null
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        const subject = `Contact from SheetSense: ${formData.name}`;
-        const body = `Name: ${formData.name}\nEmail: ${formData.email}\n\nMessage:\n${formData.message}`;
-        window.location.href = `mailto:tahabutt5238@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        setIsSubmitting(true);
+        setSubmitStatus(null);
+
+        // TODO: Replace these with your actual EmailJS credentials
+        // Create an account at https://www.emailjs.com/
+        const SERVICE_ID = 'service_0yf0y0d';
+        const TEMPLATE_ID = 'template_nykfazv';
+        const PUBLIC_KEY = 'J038XvmafM1BPrB8I';
+
+        try {
+            await emailjs.send(
+                SERVICE_ID,
+                TEMPLATE_ID,
+                {
+                    from_name: formData.name,
+                    from_email: formData.email,
+                    message: formData.message,
+                    to_name: "Awais Shabbir", // Optional: customize based on your template
+                },
+                PUBLIC_KEY
+            );
+
+            setSubmitStatus('success');
+            setFormData({ name: '', email: '', message: '' });
+        } catch (error) {
+            console.error('EmailJS Error:', error);
+            setSubmitStatus('error');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handleChange = (e) => {
@@ -108,10 +139,32 @@ const ContactSection = () => {
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
                                 type="submit"
-                                className="w-full bg-[#00FF94] text-black py-4 rounded-2xl font-bold text-lg hover:shadow-[0_0_20px_-5px_#00FF94] transition-all"
+                                disabled={isSubmitting}
+                                className="w-full bg-[#00FF94] text-black py-4 rounded-2xl font-bold text-lg hover:shadow-[0_0_20px_-5px_#00FF94] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                Send Message
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="animate-spin" size={20} />
+                                        Sending...
+                                    </>
+                                ) : (
+                                    'Send Message'
+                                )}
                             </motion.button>
+
+                            {submitStatus === 'success' && (
+                                <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-3 text-green-400">
+                                    <CheckCircle size={20} />
+                                    <p>Message sent successfully! We'll get back to you soon.</p>
+                                </div>
+                            )}
+
+                            {submitStatus === 'error' && (
+                                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400">
+                                    <AlertCircle size={20} />
+                                    <p>Failed to send message. Please check console or try again later.</p>
+                                </div>
+                            )}
                         </form>
                     </motion.div>
                 </div>
