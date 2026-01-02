@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
   <Id>5c32e365-358b-4b21-af0d-5b055529cf53</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.0.0.3</Version>
   <ProviderName>SheetSense</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="SheetSense Assistant" />
   <Description DefaultValue="AI Voice and Gesture Assistant for Excel" />
   <IconUrl DefaultValue="https://sheetsense-ai.netlify.app/assets/icon-32.png" />
   <HighResolutionIconUrl DefaultValue="https://sheetsense-ai.netlify.app/assets/icon-64.png" />
-  <SupportUrl DefaultValue="https://www.contoso.com/help" />
+  <SupportUrl DefaultValue="https://sheetsense-ai.netlify.app" />
   <AppDomains>
     <AppDomain>https://sheetsense-ai.netlify.app</AppDomain>
   </AppDomains>

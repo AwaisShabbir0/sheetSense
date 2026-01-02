@@ -1,91 +1,34 @@
 /* global Excel */
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Initialize Gemini
-// CAUTION: Exposing API Key in client side code.
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const BASE_URL = "https://api.groq.com/openai/v1";
 
 const ACTION_SCHEMA = `
 You are an AI assistant for Microsoft Excel. Your job is to translate user requests into JSON actions that can be executed by the Excel Add-in.
 
-Return a JSON OBJECT with a key "actions" containing an ARRAY of action objects.
+CRITICAL INSTRUCTION:
+- You must prioritize **DOING** over **EXPLAINING**.
+- If the user request is vague (e.g., "format this table", "make it look good"), **INFER REASONABLE DEFAULTS** (e.g., use a professional blue header style, standard font ranges) and EXECUTE the actions immediately.
+- Do NOT simply describe what you can do. Do it.
+- Only ask for clarification if the request is impossible to infer (e.g., "put the value here" with no value provided).
+
+Return a JSON OBJECT with two keys:
+1. "actions": an ARRAY of action objects. Each object MUST have a "type" field matching the Supported Actions below.
+2. "message": a string containing a natural language response to the user. be helpful, concise and friendly. If you execute actions, briefly mention what you did (e.g., "I've applied a professional format to your table.").
+
 Do NOT return markdown. Return ONLY raw JSON.
 
 Supported Actions:
-
-1. **editCell**
-   - description: Write values or formulas to specific cells.
-   - properties:
-     - address: string (e.g., "A1", "B2:C5")
-     - values: array of array of strings/numbers (row-major). 
-     - isFormula: boolean (true if values start with "=")
-
-2. **formatRange**
-   - description: Apply formatting to a range.
-   - properties:
-     - address: string (e.g., "A1:Z1")
-     - format: object containing:
-       - fill: string (hex color e.g., "#FF0000")
-       - fontColor: string (hex color)
-       - bold: boolean
-       - italic: boolean
-       - fontSize: number
-       - numberFormat: string (e.g., "$#,##0.00", "0.00%")
-       - horizontalAlignment: "Left" | "Center" | "Right"
-       - columnWidth: "AutoFit" | number
-
-3. **createTable**
-   - description: Turn a range into a table.
-   - properties:
-     - address: string
-     - hasHeaders: boolean
-     - name: string (optional)
-
-4. **createChart**
-   - description: Create a chart from data.
-   - properties:
-     - dataRange: string
-     - type: "ColumnClustered" | "Line" | "Pie" | "BarClustered"
-     - title: string
-     - seriesBy: "Auto" | "Rows" | "Columns"
-
-5. **addWorksheet**
-   - description: Add a new sheet.
-   - properties:
-     - name: string
-
-6. **freezePanes**
-    - description: Freeze rows or columns
-    - properties:
-      - type: "Row" | "Column"
-      - count: number (e.g., 1 for top row)
+1. **editCell** (address, values, isFormula)
+2. **formatRange** (address, format: {fill, fontColor, bold, italic, fontSize, numberFormat, horizontalAlignment, columnWidth})
+   - Example Defaults: header fill "#4F81BD", header text "white", bold true.
+3. **createTable** (address, hasHeaders, name)
+4. **createChart** (dataRange, type, title, seriesBy)
+5. **addWorksheet** (name)
+6. **freezePanes** (type: "Row"|"Column", count)
 `;
 
-/**
- * Helper to convert Blob to Base64 Part for Gemini
- */
-async function blobToGenerativePart(blob) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const base64data = reader.result.split(',')[1];
-            resolve({
-                inlineData: {
-                    data: base64data,
-                    mimeType: blob.type
-                }
-            });
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-    });
-}
 
-/**
- * Natural Language Service (Client-Side Only)
- * Uses Google Generative AI SDK directly.
- */
 const NaturalLanguageService = {
 
     /**
@@ -93,40 +36,33 @@ const NaturalLanguageService = {
      */
     processVoiceCommand: async (audioBlob) => {
         try {
-            // Get context
-            let contextInfo = "No selection info.";
-            try {
-                await Excel.run(async (context) => {
-                    const range = context.workbook.getSelectedRange();
-                    range.load("address");
-                    await context.sync();
-                    contextInfo = `Selected Range: "${range.address}"`;
-                });
-            } catch (e) {
-                console.warn("Excel context error:", e);
+            const formData = new FormData();
+            formData.append("file", audioBlob, "command.wav");
+            formData.append("model", "distil-whisper-large-v3-en");
+            formData.append("response_format", "json");
+
+            const response = await fetch(`${BASE_URL}/audio/transcriptions`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${GROQ_API_KEY}`
+                },
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`Groq Voice Error: ${response.status} ${errText}`);
             }
 
-            const audioPart = await blobToGenerativePart(audioBlob);
-            
-            const prompt = `${ACTION_SCHEMA}\n\nContext: ${contextInfo}\nUser Voice Command (Audio Provided)\n\nJSON Response:`;
-            
-            const result = await model.generateContent([prompt, audioPart]);
-            const responseText = result.response.text();
-            
-            const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-            const parsed = JSON.parse(cleanJson);
+            const data = await response.json();
+            const userCommand = data.text;
+            console.log("Transcribed Command:", userCommand);
 
-            if (!parsed.actions || !Array.isArray(parsed.actions)) {
-                return { text: "I heard you, but didn't generate any Excel actions.", actions: [] };
+            if (!userCommand || userCommand.trim().length === 0) {
+                return { text: "I couldn't hear any command.", actions: [] };
             }
 
-            // Execute Actions
-            await NaturalLanguageService.executeActions(parsed.actions);
-
-            return {
-                text: `Done! Executed ${parsed.actions.length} action(s).`,
-                actions: parsed.actions
-            };
+            return await NaturalLanguageService.processCommand(userCommand);
 
         } catch (error) {
             console.error("Voice Processing Error:", error);
@@ -139,7 +75,6 @@ const NaturalLanguageService = {
      */
     processCommand: async (command) => {
         try {
-            // Get context (current selection)
             let contextInfo = "No selection info.";
             try {
                 await Excel.run(async (context) => {
@@ -151,21 +86,41 @@ const NaturalLanguageService = {
                     contextInfo = `Current Sheet: "${sheet.name}". Selected Range: "${range.address}"`;
                 });
             } catch (e) {
-                console.warn("Could not get Excel context (likely not in Excel):", e);
+                console.warn("Could not get Excel context:", e);
             }
 
-            const prompt = `${ACTION_SCHEMA}\n\nContext: ${contextInfo}\nUser Request: "${command}"\n\nJSON Response:`;
+            const payload = {
+                model: "llama-3.3-70b-versatile",
+                messages: [
+                    { role: "system", content: ACTION_SCHEMA },
+                    { role: "user", content: `Context: ${contextInfo}\nUser Request: ${command}` }
+                ],
+                response_format: { type: "json_object" },
+                temperature: 0.1
+            };
 
-            const result = await model.generateContent(prompt);
-            const responseText = result.response.text();
+            const response = await fetch(`${BASE_URL}/chat/completions`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${GROQ_API_KEY}`
+                },
+                body: JSON.stringify(payload)
+            });
 
-            const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`Groq API Error: ${response.status} ${errText}`);
+            }
+
+            const data = await response.json();
+            const responseText = data.choices[0].message.content;
+            console.log("Groq Response:", responseText);
+
             let parsed;
             try {
-                 parsed = JSON.parse(cleanJson);
+                parsed = JSON.parse(responseText);
             } catch (e) {
-                // If it fails, sometimes Gemini adds extra text. We might want to be more robust, 
-                // but usually the prompt engineering handles it.
                 throw new Error("Failed to parse AI response: " + responseText);
             }
 
@@ -176,7 +131,12 @@ const NaturalLanguageService = {
             // Execute Actions
             await NaturalLanguageService.executeActions(parsed.actions);
 
-            return `Done! Executed ${parsed.actions.length} action(s).`;
+            const userFriendlyMessage = parsed.message || `Done! Executed ${parsed.actions.length} action(s).`;
+
+            return {
+                text: userFriendlyMessage,
+                actions: parsed.actions
+            };
 
         } catch (error) {
             console.error("AI Processing Error:", error);
@@ -184,35 +144,54 @@ const NaturalLanguageService = {
         }
     },
 
-    /**
-     * Execute the array of JSON actions in Excel.
-     */
     executeActions: async (actions) => {
+        // Implementation remains the same as before, just referencing the existing logic
+        // We will copy the full executeActions block from previous version or rewrite it if we overwrite.
+        // For specific tool call, I will include the full body.
+
         console.log("Executing Actions:", actions);
         let errorMessages = [];
 
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getActiveWorksheet();
-
-            // Get current selection address to use as default
             const selection = context.workbook.getSelectedRange();
             selection.load("address");
             await context.sync();
             const defaultAddress = selection.address;
 
             for (const action of actions) {
-                try {
-                    // Resolve address: Use provided or default to selection
-                    const targetAddress = action.address || defaultAddress;
-                    let targetRange = sheet.getRange(targetAddress);
+                // Fallback: Check 'action' if 'type' is missing
+                const actionType = action.type || action.action;
 
-                    switch (action.type) {
+                try {
+                    const targetAddress = action.address || defaultAddress;
+                    // Get 'Top-Left' cell of the target address to start anchoring
+                    // We will use this to resize based on data shape
+                    let anchorRange = sheet.getRange(targetAddress).getCell(0, 0);
+
+                    switch (actionType) {
                         case 'editCell':
                             if (action.values) {
-                                targetRange.values = action.values;
+                                let val = action.values;
+                                // Normalize to 2D array if it's a string, number, or 1D array
+                                if (!Array.isArray(val)) {
+                                    val = [[val]];
+                                } else if (val.length > 0 && !Array.isArray(val[0])) {
+                                    // If 1D array, AI usually means a list.
+                                    // Heuristic: If user asked for "Column", transpose to vertical?
+                                    // For now, let's treat 1D as 1 Row (standard). 
+                                    // If AI is smart, it sends [[1],[2]] for column.
+                                    val = [val];
+                                }
+
+                                const rows = val.length;
+                                const cols = val[0].length;
+
+                                // Resize range to match data dimensions
+                                const target = anchorRange.getResizedRange(rows - 1, cols - 1);
+                                target.values = val;
                             }
                             break;
-
                         case 'formatRange':
                             const f = action.format;
                             if (f.fill) targetRange.format.fill.color = f.fill;
@@ -222,43 +201,33 @@ const NaturalLanguageService = {
                             if (f.fontSize) targetRange.format.font.size = f.fontSize;
                             if (f.numberFormat) targetRange.numberFormat = [[f.numberFormat]];
                             if (f.horizontalAlignment) targetRange.format.horizontalAlignment = f.horizontalAlignment;
-
                             if (f.columnWidth === 'AutoFit') targetRange.getEntireColumn().format.autofitColumns();
                             else if (typeof f.columnWidth === 'number') targetRange.columnWidth = f.columnWidth;
                             break;
-
                         case 'createTable':
-                            // tables.add requires string address.
                             const table = sheet.tables.add(targetAddress, action.hasHeaders || true);
                             if (action.name) table.name = action.name;
                             break;
-
                         case 'createChart':
                             let chartType = Excel.ChartType.columnClustered;
                             if (action.type === 'Line') chartType = Excel.ChartType.line;
                             if (action.type === 'Pie') chartType = Excel.ChartType.pie;
                             if (action.type === 'BarClustered') chartType = Excel.ChartType.barClustered;
-
-                            // Use provided dataRange or default selection
                             const dataRange = action.dataRange ? sheet.getRange(action.dataRange) : targetRange;
-
                             const chart = sheet.charts.add(chartType, dataRange, action.seriesBy === 'Rows' ? Excel.ChartSeriesBy.rows : Excel.ChartSeriesBy.columns);
-
                             if (action.title) chart.title.text = action.title;
                             break;
-
                         case 'addWorksheet':
                             context.workbook.worksheets.add(action.name);
                             break;
-
                         case 'freezePanes':
                             if (action.type === 'Row') sheet.freezePanes.freezeRows(action.count || 1);
                             if (action.type === 'Column') sheet.freezePanes.freezeColumns(action.count || 1);
                             break;
                     }
                 } catch (innerError) {
-                    console.warn(`Failed to execute action ${action.type}:`, innerError);
-                    errorMessages.push(`${action.type}: ${innerError.message}`);
+                    console.warn(`Failed to execute action ${actionType}:`, innerError);
+                    errorMessages.push(`${actionType}: ${innerError.message}`);
                 }
             }
             await context.sync();

@@ -5,7 +5,7 @@ import NaturalLanguageService from '../services/NaturalLanguageService';
 
 const TaskPane = () => {
     const [messages, setMessages] = useState([
-        { type: 'bot', text: 'Hi! I am connected to Gemini AI . I can generate data, formulas, charts, and more. What do you need?' }
+        { type: 'bot', text: 'HEY, how can i help you?' }
     ]);
     const [inputValue, setInputValue] = useState('');
     const [isListening, setIsListening] = useState(false);
@@ -128,7 +128,8 @@ const TaskPane = () => {
         const result = await NaturalLanguageService.processCommand(userText);
 
         // Add bot response
-        setMessages(prev => [...prev, { type: 'bot', text: result }]);
+        const botText = typeof result === 'object' ? result.text : result;
+        setMessages(prev => [...prev, { type: 'bot', text: botText }]);
         setIsProcessing(false);
     };
 
@@ -191,7 +192,7 @@ const TaskPane = () => {
                         type="text"
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
-                        placeholder={isListening ? "Listening..." : "Ask Gemini to edit..."}
+                        placeholder={isListening ? "Listening..." : "Ask SheetSense to edit..."}
                         className={`w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pr-12 text-sm focus:outline-none focus:border-cyan-500/50 transition-colors placeholder:text-gray-500 ${isListening ? 'border-cyan-500/50 ring-1 ring-cyan-500/20' : ''}`}
                     />
                     <button

@@ -51,9 +51,47 @@ const Root = () => {
     return <App />;
 };
 
+class ErrorBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+    }
+
+    static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+    }
+
+    componentDidCatch(error, errorInfo) {
+        console.error("Uncaught error:", error, errorInfo);
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="p-4 bg-gray-900 text-white min-h-screen">
+                    <h2 className="text-xl text-red-500 mb-2">Something went wrong.</h2>
+                    <pre className="text-xs bg-gray-800 p-2 rounded overflow-auto whitespace-pre-wrap">
+                        {this.state.error && this.state.error.toString()}
+                    </pre>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="mt-4 px-4 py-2 bg-cyan-600 rounded text-white"
+                    >
+                        Reload
+                    </button>
+                </div>
+            );
+        }
+
+        return this.props.children;
+    }
+}
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
     <React.StrictMode>
-        <Root />
+        <ErrorBoundary>
+            <Root />
+        </ErrorBoundary>
     </React.StrictMode>
 );
