@@ -1,0 +1,368 @@
+[
+  {
+    "task_id": "report_001",
+    "task_name": "Sales Performance Report",
+    "command_example": "Create a monthly sales performance report from this data",
+    "intent_category": "REPORTING",
+    "complexity": "Intermediate",
+    "description": "Generates a summary of sales performance using a Pivot Table and Chart.",
+    "target_audience": "Business",
+    "actions": [
+      {
+        "step": 1,
+        "type": "select_range",
+        "description": "Select the entire data range including headers."
+      },
+      {
+        "step": 2,
+        "type": "create_pivot_table",
+        "description": "Insert a PivotTable on a new sheet."
+      },
+      {
+        "step": 3,
+        "type": "configure_pivot",
+        "rows": [
+          "Date (Month)"
+        ],
+        "values": [
+          "Sales Amount (Sum)"
+        ],
+        "columns": [
+          "Region"
+        ]
+      },
+      {
+        "step": 4,
+        "type": "insert_chart",
+        "chartType": "column_clustered",
+        "title": "Monthly Sales by Region"
+      },
+      {
+        "step": 5,
+        "type": "format_numbers",
+        "format": "currency"
+      }
+    ]
+  },
+  {
+    "task_id": "analysis_002",
+    "task_name": "Profit Margin Analysis",
+    "command_example": "Analyze the profit margins for my products",
+    "intent_category": "ANALYSIS",
+    "complexity": "Intermediate",
+    "description": "Calculates profit and margin percentage, applying conditional formatting.",
+    "target_audience": "Business",
+    "actions": [
+      {
+        "step": 1,
+        "type": "verify_columns",
+        "required": [
+          "Revenue",
+          "Cost"
+        ]
+      },
+      {
+        "step": 2,
+        "type": "add_column",
+        "header": "Profit",
+        "formula": "=[Revenue]-[Cost]"
+      },
+      {
+        "step": 3,
+        "type": "add_column",
+        "header": "Margin %",
+        "formula": "=[Profit]/[Revenue]"
+      },
+      {
+        "step": 4,
+        "type": "format_cells",
+        "range": "Margin %",
+        "style": "percent"
+      },
+      {
+        "step": 5,
+        "type": "conditional_formatting",
+        "range": "Margin %",
+        "rule": "color_scale_red_yellow_green"
+      }
+    ]
+  },
+  {
+    "task_id": "cleaning_003",
+    "task_name": "Data Deduplication & Cleaning",
+    "command_example": "Clean this list and remove duplicate customers",
+    "intent_category": "CLEANING",
+    "complexity": "Basic",
+    "description": "Trims whitespace and removes duplicate entries.",
+    "target_audience": "General",
+    "actions": [
+      {
+        "step": 1,
+        "type": "trim_whitespace",
+        "range": "all_text_columns"
+      },
+      {
+        "step": 2,
+        "type": "remove_duplicates",
+        "columns": [
+          "Customer ID",
+          "Email"
+        ]
+      },
+      {
+        "step": 3,
+        "type": "highlight_cells",
+        "condition": "empty",
+        "color": "yellow",
+        "description": "Highlight empty cells for review"
+      }
+    ]
+  },
+  {
+    "task_id": "analysis_004",
+    "task_name": "Trend Analysis with Moving Average",
+    "command_example": "Show me the 3-month moving average trend",
+    "intent_category": "ANALYSIS",
+    "complexity": "Advanced",
+    "description": "Calculates a rolling average to smooth out data fluctuations.",
+    "target_audience": "Business",
+    "actions": [
+      {
+        "step": 1,
+        "type": "sort_data",
+        "column": "Date",
+        "order": "ascending"
+      },
+      {
+        "step": 2,
+        "type": "add_column",
+        "header": "3-Month Moving Avg",
+        "formula": "=AVERAGE(OFFSET([Sales],-2,0,3,1))"
+      },
+      {
+        "step": 3,
+        "type": "insert_chart",
+        "chartType": "line_combo",
+        "series": [
+          "Sales",
+          "3-Month Moving Avg"
+        ]
+      }
+    ]
+  },
+  {
+    "task_id": "education_005",
+    "task_name": "Student Gradebook Setup",
+    "command_example": "Set up a gradebook to calculate final grades",
+    "intent_category": "CALCULATION",
+    "complexity": "Intermediate",
+    "description": "Sets up a weighted grade calculation for students.",
+    "target_audience": "Educators",
+    "actions": [
+      {
+        "step": 1,
+        "type": "setup_headers",
+        "columns": [
+          "Student Name",
+          "Assignment 1",
+          "Assignment 2",
+          "Midterm",
+          "Final",
+          "Total Grade"
+        ]
+      },
+      {
+        "step": 2,
+        "type": "input_weights",
+        "description": "Define weights: Assign (20%), Midterm (30%), Final (50%)"
+      },
+      {
+        "step": 3,
+        "type": "add_formula",
+        "column": "Total Grade",
+        "formula": "=([Assign 1]+[Assign 2])/2*0.2 + [Midterm]*0.3 + [Final]*0.5"
+      },
+      {
+        "step": 4,
+        "type": "conditional_formatting",
+        "range": "Total Grade",
+        "rule": "less_than",
+        "value": 60,
+        "color": "red"
+      }
+    ]
+  },
+  {
+    "task_id": "finance_006",
+    "task_name": "Loan Amortization Schedule",
+    "command_example": "Create a loan amortization schedule for $20,000 at 5% for 5 years",
+    "intent_category": "FINANCE",
+    "complexity": "Advanced",
+    "description": "Generates a detailed repayment schedule for a loan.",
+    "target_audience": "General",
+    "actions": [
+      {
+        "step": 1,
+        "type": "create_input_table",
+        "labels": [
+          "Loan Amount",
+          "Interest Rate",
+          "Years",
+          "Payments/Year"
+        ],
+        "values": [
+          20000,
+          0.05,
+          5,
+          12
+        ]
+      },
+      {
+        "step": 2,
+        "type": "calculate_pmt",
+        "formula": "=PMT(Rate/12, Years*12, -Amount)"
+      },
+      {
+        "step": 3,
+        "type": "generate_schedule",
+        "columns": [
+          "Period",
+          "Payment",
+          "Principal",
+          "Interest",
+          "Balance"
+        ],
+        "rows": 60
+      }
+    ]
+  },
+  {
+    "task_id": "business_007",
+    "task_name": "Simple Inventory Tracker",
+    "command_example": "Create an inventory tracking sheet with reorder alerts",
+    "intent_category": "TRACKING",
+    "complexity": "Intermediate",
+    "description": "Tracks stock levels and flags items needing reorder.",
+    "target_audience": "Business",
+    "actions": [
+      {
+        "step": 1,
+        "type": "setup_columns",
+        "names": [
+          "Item ID",
+          "Name",
+          "Stock Level",
+          "Reorder Point",
+          "Status"
+        ]
+      },
+      {
+        "step": 2,
+        "type": "add_formula",
+        "column": "Status",
+        "formula": "=IF([Stock Level]<=[Reorder Point], \"REORDER\", \"OK\")"
+      },
+      {
+        "step": 3,
+        "type": "conditional_formatting",
+        "range": "Status",
+        "value": "REORDER",
+        "color": "red_bold"
+      }
+    ]
+  },
+  {
+    "task_id": "analysis_008",
+    "task_name": "Top Performer Analysis (Top 10)",
+    "command_example": "Who are my top 10 salespeople?",
+    "intent_category": "ANALYSIS",
+    "complexity": "Intermediate",
+    "description": "Identifies the top 10 entities based on a numerical metric.",
+    "target_audience": "Business",
+    "actions": [
+      {
+        "step": 1,
+        "type": "filter_sort",
+        "column": "Total Sales",
+        "order": "descending"
+      },
+      {
+        "step": 2,
+        "type": "keep_top_n",
+        "n": 10
+      },
+      {
+        "step": 3,
+        "type": "insert_chart",
+        "chartType": "bar_horizontal",
+        "title": "Top 10 Salespeople"
+      }
+    ]
+  },
+  {
+    "task_id": "budget_009",
+    "task_name": "Budget vs Actual Variance",
+    "command_example": "Compare my budget against actual spending",
+    "intent_category": "REPORTING",
+    "complexity": "Intermediate",
+    "description": "Compares planned budget vs actuals and calculates variance.",
+    "target_audience": "Business",
+    "actions": [
+      {
+        "step": 1,
+        "type": "ensure_columns",
+        "names": [
+          "Category",
+          "Budget",
+          "Actual"
+        ]
+      },
+      {
+        "step": 2,
+        "type": "add_column",
+        "header": "Variance",
+        "formula": "=[Actual]-[Budget]"
+      },
+      {
+        "step": 3,
+        "type": "add_column",
+        "header": "Variance %",
+        "formula": "=[Variance]/[Budget]"
+      },
+      {
+        "step": 4,
+        "type": "insert_chart",
+        "chartType": "waterfall",
+        "title": "Budget Variance by Category"
+      }
+    ]
+  },
+  {
+    "task_id": "setup_010",
+    "task_name": "VLOOKUP Master Setup",
+    "command_example": "Link this invoice sheet to the product price list",
+    "intent_category": "DATA_MANAGEMENT",
+    "complexity": "Advanced",
+    "description": "Establishes a VLOOKUP relation between two datasets.",
+    "target_audience": "Advanced User",
+    "actions": [
+      {
+        "step": 1,
+        "type": "identify_keys",
+        "source_key": "Product ID",
+        "target_key": "Product ID"
+      },
+      {
+        "step": 2,
+        "type": "add_column",
+        "header": "Unit Price",
+        "formula": "=VLOOKUP([@Product ID], 'Price List'!A:B, 2, FALSE)"
+      },
+      {
+        "step": 3,
+        "type": "handle_errors",
+        "formula_wrap": "=IFERROR(..., \"Not Found\")"
+      }
+    ]
+  }
+]

@@ -3,30 +3,42 @@
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
 const BASE_URL = "https://api.groq.com/openai/v1";
 
+import taskLibrary from '../excel_task_library.json';
+
+// Helper to map common color names to hex or use as-is
+function getColor(colorName) {
+    const colors = {
+        "red": "#FF0000", "green": "#00FF00", "blue": "#0000FF",
+        "yellow": "#FFFF00", "black": "#000000", "white": "#FFFFFF",
+        "orange": "#FFA500", "purple": "#800080", "gray": "#808080"
+    };
+    return colors[colorName.toLowerCase()] || colorName;
+}
+
 const ACTION_SCHEMA = `
 You are an AI assistant for Microsoft Excel. Your job is to translate user requests into JSON actions that can be executed by the Excel Add-in.
 
 CRITICAL INSTRUCTION:
-- You must prioritize **DOING** over **EXPLAINING**.
-- If the user request is vague (e.g., "format this table", "make it look good"), **INFER REASONABLE DEFAULTS** (e.g., use a professional blue header style, standard font ranges) and EXECUTE the actions immediately.
-- Do NOT simply describe what you can do. Do it.
-- Only ask for clarification if the request is impossible to infer (e.g., "put the value here" with no value provided).
+- **YOU CANNOT SEE THE DATA**. Do not guess cell addresses for "empty cells" or "values > 5". 
+- ALWAYS use **conditional_formatting**  or **highlight_cells** for tasks involving data conditions (e.g. "highlight empty", "color values over 100").
+- If the user request is vague, **INFER REASONABLE DEFAULTS** and EXECUTE.
+- Do not ask for clarification.
 
 Return a JSON OBJECT with two keys:
-1. "actions": an ARRAY of action objects. Each object MUST have a "type" field matching the Supported Actions below.
-2. "message": a string containing a natural language response to the user. be helpful, concise and friendly. If you execute actions, briefly mention what you did (e.g., "I've applied a professional format to your table.").
-
-Do NOT return markdown. Return ONLY raw JSON.
+1. "actions": an ARRAY of action objects.
+2. "message": a concise natural language response.
 
 Supported Actions:
-1. **editCell** (address, values, isFormula)
-2. **formatRange** (address, format: {fill, fontColor, bold, italic, fontSize, numberFormat, horizontalAlignment, columnWidth})
-   - Example Defaults: header fill "#4F81BD", header text "white", bold true.
-3. **createTable** (address, hasHeaders, name)
-4. **createChart** (dataRange, type, title, seriesBy)
-5. **addWorksheet** (name)
-6. **freezePanes** (type: "Row"|"Column", count)
+1. **editCell** (address, values)
+2. **formatRange** (address, format: {fill, fontColor, ...})
+3. **createTable**, **createChart**, **addWorksheet**, **freezePanes**
+4. **createPivotTable**, **sortRange**, **removeDuplicates**
+5. **highlight_cells** (range, condition: "empty"|"non-empty"|"errors", color)
+   - Use this to highlight specific cells based on content.
+6. **conditional_formatting** (range, rule, value, color)
 `;
+
+
 
 
 const NaturalLanguageService = {
@@ -70,6 +82,16 @@ const NaturalLanguageService = {
         }
     },
 
+    findMatchingTask: (command) => {
+        const lowerCommand = command.toLowerCase();
+        // Simple heuristic matching
+        const match = taskLibrary.find(task => {
+            return lowerCommand.includes(task.task_name.toLowerCase()) ||
+                lowerCommand.includes(task.command_example.toLowerCase().replace("this", "").trim());
+        });
+        return match;
+    },
+
     /**
      * Process a natural language command text.
      */
@@ -89,10 +111,26 @@ const NaturalLanguageService = {
                 console.warn("Could not get Excel context:", e);
             }
 
+            // Check for Task Library Match
+            const matchedTask = NaturalLanguageService.findMatchingTask(command);
+            let systemPrompt = ACTION_SCHEMA;
+
+            if (matchedTask) {
+                console.log("Matched Task Library:", matchedTask.task_name);
+                systemPrompt += `\n\nUSER INTENT MATCHED: "${matchedTask.task_name}" (${matchedTask.intent_category}).
+                RECOMMENDED PROCEDURE:
+                ${JSON.stringify(matchedTask.actions, null, 2)}
+                
+                INSTRUCTION: Follow the procedure above. Convert these high-level steps into the supported actions.
+                If a step requires an unsupported action, attempt to approximate it using available tools (e.g. formulas in cells).`;
+            } else {
+                systemPrompt += `\n\nTask Library: I have access to a library of standard Excel tasks (Reporting, Analysis, Cleaning). If the user request implies one of these, execute the standard procedure.`;
+            }
+
             const payload = {
                 model: "llama-3.3-70b-versatile",
                 messages: [
-                    { role: "system", content: ACTION_SCHEMA },
+                    { role: "system", content: systemPrompt },
                     { role: "user", content: `Context: ${contextInfo}\nUser Request: ${command}` }
                 ],
                 response_format: { type: "json_object" },
@@ -145,10 +183,6 @@ const NaturalLanguageService = {
     },
 
     executeActions: async (actions) => {
-        // Implementation remains the same as before, just referencing the existing logic
-        // We will copy the full executeActions block from previous version or rewrite it if we overwrite.
-        // For specific tool call, I will include the full body.
-
         console.log("Executing Actions:", actions);
         let errorMessages = [];
 
@@ -167,20 +201,24 @@ const NaturalLanguageService = {
                     const targetAddress = action.address || defaultAddress;
                     // Get 'Top-Left' cell of the target address to start anchoring
                     // We will use this to resize based on data shape
-                    let anchorRange = sheet.getRange(targetAddress).getCell(0, 0);
+                    let targetRange;
+                    try {
+                        targetRange = sheet.getRange(targetAddress);
+                    } catch (e) {
+                        // Fallback if address is invalid or missing, use selection
+                        targetRange = selection;
+                    }
+                    let anchorRange = targetRange.getCell(0, 0);
 
                     switch (actionType) {
                         case 'editCell':
-                            if (action.values) {
-                                let val = action.values;
+                            const rawValue = action.values || action.value;
+                            if (rawValue !== undefined && rawValue !== null) {
+                                let val = rawValue;
                                 // Normalize to 2D array if it's a string, number, or 1D array
                                 if (!Array.isArray(val)) {
                                     val = [[val]];
                                 } else if (val.length > 0 && !Array.isArray(val[0])) {
-                                    // If 1D array, AI usually means a list.
-                                    // Heuristic: If user asked for "Column", transpose to vertical?
-                                    // For now, let's treat 1D as 1 Row (standard). 
-                                    // If AI is smart, it sends [[1],[2]] for column.
                                     val = [val];
                                 }
 
@@ -190,6 +228,8 @@ const NaturalLanguageService = {
                                 // Resize range to match data dimensions
                                 const target = anchorRange.getResizedRange(rows - 1, cols - 1);
                                 target.values = val;
+                            } else {
+                                errorMessages.push(`Action 'editCell' missing 'values' or 'value'`);
                             }
                             break;
                         case 'formatRange':
@@ -224,12 +264,156 @@ const NaturalLanguageService = {
                             if (action.type === 'Row') sheet.freezePanes.freezeRows(action.count || 1);
                             if (action.type === 'Column') sheet.freezePanes.freezeColumns(action.count || 1);
                             break;
+                        case 'createPivotTable':
+                            // Basic Pivot Table implementation
+                            // Requires: sourceRange, destinationCell (default: new sheet)
+                            // rows, columns, values (arrays of strings)
+                            const pivotSource = action.sourceRange ? sheet.getRange(action.sourceRange) : targetRange;
+
+                            let pivotDestSheet = sheet;
+                            let pivotDestCell = "A1";
+
+                            if (!action.destinationCell) {
+                                // Default to new sheet
+                                pivotDestSheet = context.workbook.worksheets.add(`Pivot_${Math.floor(Math.random() * 1000)}`);
+                            } else {
+                                pivotDestCell = action.destinationCell;
+                            }
+
+                            const pivotTable = pivotDestSheet.pivotTables.add("PivotTable1", pivotSource, pivotDestCell);
+
+                            if (action.rows) {
+                                action.rows.forEach(r => pivotTable.rowHierarchies.add(pivotTable.hierarchies.getItem(r)));
+                            }
+                            if (action.columns) {
+                                action.columns.forEach(c => pivotTable.columnHierarchies.add(pivotTable.hierarchies.getItem(c)));
+                            }
+                            if (action.values) {
+                                action.values.forEach(v => pivotTable.dataHierarchies.add(pivotTable.hierarchies.getItem(v)));
+                            }
+                            break;
+                        case 'sortRange':
+                            // Helper for sorting
+                            const sortFields = [
+                                {
+                                    key: action.keyColumnIndex || 0,
+                                    ascending: action.ascending !== false // default true
+                                }
+                            ];
+                            targetRange.sort.apply(sortFields);
+                            break;
+                        case 'trim_whitespace':
+                        case 'trimWhitespace':
+                            // Implementation for trimming whitespace
+                            targetRange.load("values");
+                            await context.sync();
+                            const trimmedValues = targetRange.values.map(row =>
+                                row.map(cell => (typeof cell === 'string' ? cell.trim() : cell))
+                            );
+                            targetRange.values = trimmedValues;
+                            break;
+
+                        case 'removeDuplicates':
+                        case 'remove_duplicates':
+                            let columns = action.columns || [0];
+
+                            // Check if columns are strings and mapping is needed
+                            if (columns.length > 0 && typeof columns[0] === 'string') {
+                                // We need to read specific columns.
+                                // NOTE: Reading headers to map strings to indices is safer but adds complexity.
+                                // Fallback Strategy: If strings are provided, use ALL columns to be safe, 
+                                // or if specific mapping is strictly required, we'd need to fetch headers.
+
+                                // Let's try to fetch headers if we have strings.
+                                const headerRow = targetRange.getRow(0);
+                                headerRow.load("values");
+                                await context.sync();
+                                const headers = headerRow.values[0]; // 1D array of headers
+
+                                const mappedIndices = [];
+                                columns.forEach(colName => {
+                                    const index = headers.findIndex(h => h.toString().toLowerCase() === colName.toLowerCase());
+                                    if (index !== -1) mappedIndices.push(index);
+                                });
+
+                                if (mappedIndices.length > 0) {
+                                    columns = mappedIndices;
+                                } else {
+                                    // If no match found, default to first column or 0
+                                    console.warn("Could not match custom column names, defaulting to column 0");
+                                    columns = [0];
+                                }
+                            }
+
+                            // Ensure columns is an array of numbers
+                            targetRange.removeDuplicates(columns, true);
+                            break;
+
+                        case 'highlight_cells':
+                        case 'highlightCells':
+                            // Logic: Highlight empty cells or specific condition
+                            // Simplification: Loop and check condition
+                            targetRange.load(["values", "address", "rowCount", "columnCount"]);
+                            await context.sync();
+
+                            const highlightColor = getColor(action.color || "yellow"); // Use a different variable name to avoid conflict
+
+                            // Note: Setting format cell-by-cell is slow. 
+                            // Optimization: Collect ranges? Or just set condition if formatting rule?
+                            // "conditional_formatting" action is better for this.
+                            // IF explicitly asking to "highlight", we can use a conditional format rule for "Blanks".
+
+                            if (action.condition === 'empty') {
+                                const cf = targetRange.conditionalFormats.add(Excel.ConditionalFormatType.containsBlanks);
+                                cf.containsBlanks.format.fill.color = highlightColor;
+                            } else if (action.condition === 'errors') {
+                                const cf = targetRange.conditionalFormats.add(Excel.ConditionalFormatType.containsErrors);
+                                cf.containsErrors.format.fill.color = highlightColor;
+                            } else if (action.condition === 'non-empty') {
+                                // Fallback for non-empty: Use CellValue NotEqual to empty string?
+                                // This is imperfect but safely executes without crashing using valid enums.
+                                // Alternatively, simply ignore or log warning since 'noBlanks' enum doesn't exist.
+                                // For now, let's omit the invalid branch to stop crashing.
+                                console.warn("Condition 'non-empty' is not directly supported via simple highlighted cells yet.");
+                            }
+                            break;
+
+                        case 'conditional_formatting':
+                            const cfColor = getColor(action.color || "red");
+                            if (action.rule === 'color_scale_red_yellow_green') {
+                                const cf = targetRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+                                cf.colorScale.criteria = {
+                                    minimum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" },
+                                    midpoint: { formula: null, type: Excel.ConditionalFormatColorCriterionType.percentile, color: "#FFEB84" },
+                                    maximum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" }
+                                };
+                            } else if (action.rule === 'less_than') {
+                                const cf = targetRange.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
+                                cf.cellValue.format.font.color = cfColor;
+                                cf.cellValue.rule = { formula1: action.value.toString(), operator: Excel.ConditionalCellValueOperator.lessThan };
+                            } else if (action.rule === 'greater_than') {
+                                const cf = targetRange.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
+                                cf.cellValue.format.font.color = cfColor;
+                                cf.cellValue.rule = { formula1: action.value.toString(), operator: Excel.ConditionalCellValueOperator.greaterThan };
+                            } else if (action.value === 'REORDER') {
+                                // Specific text rule
+                                const cf = targetRange.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
+                                cf.cellValue.format.font.bold = true;
+                                cf.cellValue.format.font.color = "red";
+                                cf.cellValue.rule = { formula1: `="${action.value}"`, operator: Excel.ConditionalCellValueOperator.equalTo };
+                            }
+                            break;
+
+                        default:
+                            console.warn(`Unsupported action type: ${actionType}`);
+                            errorMessages.push(`Unsupported action type: ${actionType}`);
+
                     }
                 } catch (innerError) {
                     console.warn(`Failed to execute action ${actionType}:`, innerError);
                     errorMessages.push(`${actionType}: ${innerError.message}`);
                 }
-            }
+            } // end for loop
             await context.sync();
         });
 

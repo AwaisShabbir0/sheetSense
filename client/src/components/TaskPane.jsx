@@ -115,22 +115,34 @@ const TaskPane = () => {
         const userText = inputValue;
         setInputValue('');
 
-        // Stop listening when sending message
         if (isListening) {
             stopRecording();
         }
 
-        // Add user message
         setMessages(prev => [...prev, { type: 'user', text: userText }]);
         setIsProcessing(true);
 
-        // Process command (No key needed, handled by server)
-        const result = await NaturalLanguageService.processCommand(userText);
+        try {
+            const result = await NaturalLanguageService.processCommand(userText);
 
-        // Add bot response
-        const botText = typeof result === 'object' ? result.text : result;
-        setMessages(prev => [...prev, { type: 'bot', text: botText }]);
-        setIsProcessing(false);
+            let botText = "Done.";
+            if (typeof result === 'string') {
+                botText = result;
+            } else if (result && typeof result === 'object' && result.text) {
+                botText = result.text;
+            } else if (result && typeof result === 'object') {
+                botText = JSON.stringify(result);
+            } else {
+                botText = "Unexpected response format.";
+            }
+
+            setMessages(prev => [...prev, { type: 'bot', text: botText }]);
+        } catch (error) {
+            console.error("Chat Error:", error);
+            setMessages(prev => [...prev, { type: 'bot', text: `Error: ${error.message}` }]);
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     return (
