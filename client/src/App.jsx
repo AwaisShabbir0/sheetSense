@@ -1,39 +1,23 @@
 import React from 'react';
-import Navbar from './components/Navbar';
-import HeroSection from './components/HeroSection';
-import FeaturesSection from './components/FeaturesSection';
-import HowItWorksSection from './components/HowItWorksSection';
-import PricingSection from './components/PricingSection';
-import ContactSection from './components/ContactSection';
-import ShareSection from './components/ShareSection';
-import Footer from './components/Footer';
+import { MemoryRouter as Router, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import LandingPage from './pages/LandingPage';
+import SignIn from './pages/SignIn';
+import SignUp from './pages/SignUp';
+import UserProfile from './pages/UserProfile';
 
 function App() {
     return (
-        <div className="min-h-screen bg-black text-white selection:bg-primary selection:text-black">
-            <Navbar />
-            <main>
-                <div id="home">
-                    <HeroSection />
-                </div>
-                <div id="features">
-                    <FeaturesSection />
-                </div>
-                <div id="how-it-works">
-                    <HowItWorksSection />
-                </div>
-                <div id="pricing">
-                    <PricingSection />
-                </div>
-                <div id="share">
-                    <ShareSection />
-                </div>
-                <div id="contact">
-                    <ContactSection />
-                </div>
-            </main>
-            <Footer />
-        </div>
+        <AuthProvider>
+            <Router>
+                <Routes>
+                    <Route path="/" element={<LandingPage />} />
+                    <Route path="/signin" element={<SignIn />} />
+                    <Route path="/signup" element={<SignUp />} />
+                    <Route path="/profile" element={<UserProfile />} />
+                </Routes>
+            </Router>
+        </AuthProvider>
     );
 }
 

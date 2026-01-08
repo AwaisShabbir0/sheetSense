@@ -3,8 +3,13 @@ import { motion, useMotionValue, useTransform } from 'framer-motion';
 import { Download, PlayCircle, Mic, X, Terminal } from 'lucide-react';
 import { TypeAnimation } from 'react-type-animation';
 
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+
 const HeroSection = () => {
     const [isVideoOpen, setIsVideoOpen] = useState(false);
+    const { isAuthenticated } = useAuth();
+    const navigate = useNavigate();
     const x = useMotionValue(0);
     const y = useMotionValue(0);
 
@@ -14,6 +19,21 @@ const HeroSection = () => {
     const handleMouseMove = (event) => {
         x.set(event.clientX);
         y.set(event.clientY);
+    };
+
+    const handleDownload = (e) => {
+        if (!isAuthenticated) {
+            e.preventDefault();
+            navigate('/signin');
+        }
+    };
+
+    const handleWatchDemo = () => {
+        if (!isAuthenticated) {
+            navigate('/signin');
+        } else {
+            setIsVideoOpen(true);
+        }
     };
 
     return (
@@ -84,12 +104,17 @@ const HeroSection = () => {
                     transition={{ duration: 0.6, delay: 0.6 }}
                     className="flex flex-col sm:flex-row gap-4 mb-24"
                 >
-                    <a href="/manifest.xml" download="SheetSense-Manifest.xml" className="group flex items-center justify-center gap-2 bg-[#00FF94] text-black px-8 py-4 rounded-full font-bold text-lg hover:shadow-[0_0_30px_-5px_#00FF9466] transition-all transform hover:-translate-y-1">
+                    <a
+                        href="/manifest.xml"
+                        download="SheetSense-Manifest.xml"
+                        onClick={handleDownload}
+                        className="group flex items-center justify-center gap-2 bg-[#00FF94] text-black px-8 py-4 rounded-full font-bold text-lg hover:shadow-[0_0_30px_-5px_#00FF9466] transition-all transform hover:-translate-y-1"
+                    >
                         <Download size={20} className="group-hover:translate-y-0.5 transition-transform" />
                         Download XML
                     </a>
                     <button
-                        onClick={() => setIsVideoOpen(true)}
+                        onClick={handleWatchDemo}
                         className="flex items-center justify-center gap-2 border border-white/20 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-white/5 transition-all"
                     >
                         <PlayCircle size={20} />
