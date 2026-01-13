@@ -364,5 +364,183 @@
         "formula_wrap": "=IFERROR(..., \"Not Found\")"
       }
     ]
+  },
+  {
+    "task_id": "simulation_011",
+    "task_name": "Monte Carlo",
+    "command_example": "Monte Carlo simulation",
+    "intent_category": "SIMULATION",
+    "complexity": "Advanced",
+    "description": "Simulates 1,000 potential sales outcomes based on normal distribution assumptions to assess risk.",
+    "target_audience": "Data Scientist",
+    "actions": [
+      {
+        "step": 1,
+        "type": "editCell",
+        "address": "A1:B4",
+        "values": [
+          [
+            "Assumption",
+            "Value"
+          ],
+          [
+            "Mean Sales",
+            100000
+          ],
+          [
+            "Std Dev",
+            15000
+          ],
+          [
+            "Iterations",
+            1000
+          ]
+        ]
+      },
+      {
+        "step": 2,
+        "type": "formatRange",
+        "address": "A1:B1",
+        "format": {
+          "bold": true,
+          "fill": "#E0E0E0"
+        }
+      },
+      {
+        "step": 3,
+        "type": "editCell",
+        "address": "D1:E1001",
+        "values": [
+          [
+            "Scenario ID",
+            "Simulated Sales"
+          ],
+          [
+            "=SEQUENCE(1000)",
+            "=NORM.INV(RAND(), $B$2, $B$3)"
+          ]
+        ]
+      },
+      {
+        "step": 4,
+        "type": "editCell",
+        "address": "G1:H4",
+        "values": [
+          [
+            "Metric",
+            "Value"
+          ],
+          [
+            "Worst Case (P5)",
+            "=PERCENTILE.INC(E:E, 0.05)"
+          ],
+          [
+            "Likely Case (Median)",
+            "=MEDIAN(E:E)"
+          ],
+          [
+            "Best Case (P95)",
+            "=PERCENTILE.INC(E:E, 0.95)"
+          ]
+        ]
+      },
+      {
+        "step": 5,
+        "type": "formatRange",
+        "address": "G1:H1",
+        "format": {
+          "bold": true,
+          "fill": "#E0E0E0"
+        }
+      },
+      {
+        "step": 6,
+        "type": "formatRange",
+        "address": "H2:H4",
+        "format": {
+          "numberFormat": "$#,##0",
+          "bold": true
+        }
+      },
+      {
+        "step": 7,
+        "type": "createChart",
+        "chartType": "ColumnClustered",
+        "dataRange": "E1:E1001",
+        "title": "Distribution of Potential Sales Outcomes",
+        "seriesBy": "Columns"
+      }
+    ]
+  },
+  {
+    "task_id": "report_weekly_sales_001",
+    "task_name": "Weekly Sales Report",
+    "command_example": "Create weekly sales report",
+    "intent_category": "REPORTING",
+    "complexity": "Intermediate",
+    "description": "Generates a blank weekly sales report template with formulas for variance and totals.",
+    "target_audience": "Sales",
+    "actions": [
+      {
+        "step": 1,
+        "type": "construct_report",
+        "description": "Create the Weekly Sales Report table starting at the user's requested cell (default A1).",
+        "structure": {
+          "columns": [
+            "",
+            "COLD CALLS MADE",
+            "FOLLOW-UP CALLS",
+            "EMAILS SENT",
+            "MEETINGS ARRANGED",
+            "VISITS COMPLETED",
+            "LEADS GENERATED",
+            "DEALS CLOSED",
+            "PRODUCTS SOLD",
+            "SALES REVENUE",
+            "TARGET AMOUNT",
+            "VARIANCE",
+            "NOTES"
+          ],
+          "rows": [
+            "MON",
+            "TUES",
+            "WED",
+            "THURS",
+            "FRI",
+            "SAT",
+            "SUN",
+            "TOTALS"
+          ],
+          "formatting": {
+            "headers": "Bold, Fill #FFC000, Center, AutoFit",
+            "rowLabels": "Bold",
+            "totalsRow": "Bold, Fill #E7E6E6",
+            "currencyCols": [
+              "SALES REVENUE",
+              "TARGET AMOUNT",
+              "VARIANCE"
+            ],
+            "varianceCol": "Red text"
+          },
+          "logic": {
+            "VARIANCE": "SALES REVENUE - TARGET AMOUNT",
+            "TOTALS": "SUM of each column"
+          }
+        },
+        "instruction": "Generate 'editCell' and 'formatRange' actions. 1. HEADERS: Horizontal fill (e.g. K1:W1) with bold/yellow/AutoFit formatting. 2. ROW LABELS: Vertical fill (e.g. K2:K8). IMPORTANT: Values MUST be a vertical array like [['MON'], ['TUES']]. Do NOT use a flat array. 3. CRITICAL: Every action object MUST include: { 'type': 'editCell' ... } or { 'type': 'formatRange' ... }. Do NOT omit the 'type' key."
+      }
+    ]
+  },
+  {
+    "task_name": "Restaurant Monthly Sales Report",
+    "intent_category": "reporting",
+    "command_example": "Create a restaurant monthly sales report dashboard",
+    "required_columns": [],
+    "actions": [
+      {
+        "type": "generate_restaurant_report",
+        "instruction": "Execute the 'generate_restaurant_report' action. Return: { 'type': 'generate_restaurant_report', 'address': 'TARGET_CELL' } where TARGET_CELL is the user-specified cell (e.g. 'A39') or null if not specified."
+      }
+    ]
   }
 ]

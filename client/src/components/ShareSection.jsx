@@ -19,7 +19,7 @@ const ShareSection = () => {
                     <SocialButton
                         icon={<Instagram size={24} />}
                         label="Follow on Instagram"
-                        href="https://www.instagram.com/x_.awaisss_?igsh=MXF0YWQ5dGNlaWNzZQ%3D%3D&utm_source=qr"
+                        href="https://www.instagram.com/sheetsense.ai?utm_source=qr"
                         gradient="from-[#833AB4] via-[#FD1D1D] to-[#F77737]"
                         delay={0}
                     />

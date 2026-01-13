@@ -11,7 +11,7 @@ const SignUp = () => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const { signup } = useAuth();
+    const { signup, googleSignIn } = useAuth();
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
@@ -26,11 +26,22 @@ const SignUp = () => {
         setIsSubmitting(true);
         try {
             await signup(name, email, password);
-            navigate('/');
+            navigate('/signin');
         } catch (err) {
-            setError('Failed to create account. Please try again.');
+            setError(err.message.replace('Firebase: ', ''));
+            console.error(err);
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleGoogleSignIn = async () => {
+        try {
+            await googleSignIn();
+            navigate('/');
+        } catch (error) {
+            console.error("Google Sign In Error:", error);
+            setError("Failed to sign in with Google.");
         }
     };
 
@@ -137,6 +148,22 @@ const SignUp = () => {
                             )}
                         </button>
                     </form>
+
+                    <div className="my-6 flex items-center">
+                        <div className="flex-grow border-t border-white/10"></div>
+                        <span className="mx-4 text-white/40 text-sm">OR</span>
+                        <div className="flex-grow border-t border-white/10"></div>
+                    </div>
+
+                    <button
+                        onClick={handleGoogleSignIn}
+                        className="w-full bg-white text-black font-semibold py-3 rounded-lg hover:bg-white/90 transition-all flex items-center justify-center gap-2"
+                    >
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .533 5.333 .533 12S5.867 24 12.48 24c3.44 0 6.053-1.133 7.973-3.267 2.027-2.107 2.613-5.093 2.613-7.16 0-.693-.067-1.347-.187-1.973h-10.4z" />
+                        </svg>
+                        Sign up with Google
+                    </button>
 
                     <div className="mt-6 text-center text-sm text-white/40">
                         Already have an account?{' '}

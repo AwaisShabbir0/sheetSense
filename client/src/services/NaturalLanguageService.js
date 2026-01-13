@@ -38,9 +38,6 @@ Supported Actions:
 6. **conditional_formatting** (range, rule, value, color)
 `;
 
-
-
-
 const NaturalLanguageService = {
 
     /**
@@ -199,13 +196,10 @@ const NaturalLanguageService = {
 
                 try {
                     const targetAddress = action.address || defaultAddress;
-                    // Get 'Top-Left' cell of the target address to start anchoring
-                    // We will use this to resize based on data shape
                     let targetRange;
                     try {
                         targetRange = sheet.getRange(targetAddress);
                     } catch (e) {
-                        // Fallback if address is invalid or missing, use selection
                         targetRange = selection;
                     }
                     let anchorRange = targetRange.getCell(0, 0);
@@ -215,25 +209,34 @@ const NaturalLanguageService = {
                             const rawValue = action.values || action.value;
                             if (rawValue !== undefined && rawValue !== null) {
                                 let val = rawValue;
-                                // Normalize to 2D array if it's a string, number, or 1D array
-                                if (!Array.isArray(val)) {
-                                    val = [[val]];
-                                } else if (val.length > 0 && !Array.isArray(val[0])) {
-                                    val = [val];
+                                if (!Array.isArray(val)) val = [[val]];
+                                else if (val.length > 0 && !Array.isArray(val[0])) val = [val];
+
+                                const dataRows = val.length;
+                                const dataCols = val[0].length;
+
+                                targetRange.load(["rowCount", "columnCount"]);
+                                await context.sync();
+
+                                if (dataRows === 1 && dataCols === 1 && (targetRange.rowCount > 1 || targetRange.columnCount > 1)) {
+                                    const fillVal = val[0][0];
+                                    const expandedData = Array(targetRange.rowCount).fill().map(() => Array(targetRange.columnCount).fill(fillVal));
+                                    targetRange.values = expandedData;
+                                } else {
+                                    const target = anchorRange.getResizedRange(dataRows - 1, dataCols - 1);
+                                    target.values = val;
                                 }
-
-                                const rows = val.length;
-                                const cols = val[0].length;
-
-                                // Resize range to match data dimensions
-                                const target = anchorRange.getResizedRange(rows - 1, cols - 1);
-                                target.values = val;
                             } else {
                                 errorMessages.push(`Action 'editCell' missing 'values' or 'value'`);
                             }
                             break;
+
                         case 'formatRange':
                             const f = action.format;
+                            if (!f) {
+                                console.warn("Action 'formatRange' missing 'format' property");
+                                break;
+                            }
                             if (f.fill) targetRange.format.fill.color = f.fill;
                             if (f.fontColor) targetRange.format.font.color = f.fontColor;
                             if (f.bold !== undefined) targetRange.format.font.bold = f.bold;
@@ -244,10 +247,12 @@ const NaturalLanguageService = {
                             if (f.columnWidth === 'AutoFit') targetRange.getEntireColumn().format.autofitColumns();
                             else if (typeof f.columnWidth === 'number') targetRange.columnWidth = f.columnWidth;
                             break;
+
                         case 'createTable':
                             const table = sheet.tables.add(targetAddress, action.hasHeaders || true);
                             if (action.name) table.name = action.name;
                             break;
+
                         case 'createChart':
                             let chartType = Excel.ChartType.columnClustered;
                             if (action.type === 'Line') chartType = Excel.ChartType.line;
@@ -257,24 +262,22 @@ const NaturalLanguageService = {
                             const chart = sheet.charts.add(chartType, dataRange, action.seriesBy === 'Rows' ? Excel.ChartSeriesBy.rows : Excel.ChartSeriesBy.columns);
                             if (action.title) chart.title.text = action.title;
                             break;
+
                         case 'addWorksheet':
                             context.workbook.worksheets.add(action.name);
                             break;
+
                         case 'freezePanes':
                             if (action.type === 'Row') sheet.freezePanes.freezeRows(action.count || 1);
                             if (action.type === 'Column') sheet.freezePanes.freezeColumns(action.count || 1);
                             break;
-                        case 'createPivotTable':
-                            // Basic Pivot Table implementation
-                            // Requires: sourceRange, destinationCell (default: new sheet)
-                            // rows, columns, values (arrays of strings)
-                            const pivotSource = action.sourceRange ? sheet.getRange(action.sourceRange) : targetRange;
 
+                        case 'createPivotTable':
+                            const pivotSource = action.sourceRange ? sheet.getRange(action.sourceRange) : targetRange;
                             let pivotDestSheet = sheet;
                             let pivotDestCell = "A1";
 
                             if (!action.destinationCell) {
-                                // Default to new sheet
                                 pivotDestSheet = context.workbook.worksheets.add(`Pivot_${Math.floor(Math.random() * 1000)}`);
                             } else {
                                 pivotDestCell = action.destinationCell;
@@ -282,29 +285,18 @@ const NaturalLanguageService = {
 
                             const pivotTable = pivotDestSheet.pivotTables.add("PivotTable1", pivotSource, pivotDestCell);
 
-                            if (action.rows) {
-                                action.rows.forEach(r => pivotTable.rowHierarchies.add(pivotTable.hierarchies.getItem(r)));
-                            }
-                            if (action.columns) {
-                                action.columns.forEach(c => pivotTable.columnHierarchies.add(pivotTable.hierarchies.getItem(c)));
-                            }
-                            if (action.values) {
-                                action.values.forEach(v => pivotTable.dataHierarchies.add(pivotTable.hierarchies.getItem(v)));
-                            }
+                            if (action.rows) action.rows.forEach(r => pivotTable.rowHierarchies.add(pivotTable.hierarchies.getItem(r)));
+                            if (action.columns) action.columns.forEach(c => pivotTable.columnHierarchies.add(pivotTable.hierarchies.getItem(c)));
+                            if (action.values) action.values.forEach(v => pivotTable.dataHierarchies.add(pivotTable.hierarchies.getItem(v)));
                             break;
+
                         case 'sortRange':
-                            // Helper for sorting
-                            const sortFields = [
-                                {
-                                    key: action.keyColumnIndex || 0,
-                                    ascending: action.ascending !== false // default true
-                                }
-                            ];
+                            const sortFields = [{ key: action.keyColumnIndex || 0, ascending: action.ascending !== false }];
                             targetRange.sort.apply(sortFields);
                             break;
+
                         case 'trim_whitespace':
                         case 'trimWhitespace':
-                            // Implementation for trimming whitespace
                             targetRange.load("values");
                             await context.sync();
                             const trimmedValues = targetRange.values.map(row =>
@@ -316,52 +308,26 @@ const NaturalLanguageService = {
                         case 'removeDuplicates':
                         case 'remove_duplicates':
                             let columns = action.columns || [0];
-
-                            // Check if columns are strings and mapping is needed
                             if (columns.length > 0 && typeof columns[0] === 'string') {
-                                // We need to read specific columns.
-                                // NOTE: Reading headers to map strings to indices is safer but adds complexity.
-                                // Fallback Strategy: If strings are provided, use ALL columns to be safe, 
-                                // or if specific mapping is strictly required, we'd need to fetch headers.
-
-                                // Let's try to fetch headers if we have strings.
                                 const headerRow = targetRange.getRow(0);
                                 headerRow.load("values");
                                 await context.sync();
-                                const headers = headerRow.values[0]; // 1D array of headers
-
+                                const headers = headerRow.values[0];
                                 const mappedIndices = [];
                                 columns.forEach(colName => {
                                     const index = headers.findIndex(h => h.toString().toLowerCase() === colName.toLowerCase());
                                     if (index !== -1) mappedIndices.push(index);
                                 });
-
-                                if (mappedIndices.length > 0) {
-                                    columns = mappedIndices;
-                                } else {
-                                    // If no match found, default to first column or 0
-                                    console.warn("Could not match custom column names, defaulting to column 0");
-                                    columns = [0];
-                                }
+                                columns = mappedIndices.length > 0 ? mappedIndices : [0];
                             }
-
-                            // Ensure columns is an array of numbers
                             targetRange.removeDuplicates(columns, true);
                             break;
 
                         case 'highlight_cells':
                         case 'highlightCells':
-                            // Logic: Highlight empty cells or specific condition
-                            // Simplification: Loop and check condition
                             targetRange.load(["values", "address", "rowCount", "columnCount"]);
                             await context.sync();
-
-                            const highlightColor = getColor(action.color || "yellow"); // Use a different variable name to avoid conflict
-
-                            // Note: Setting format cell-by-cell is slow. 
-                            // Optimization: Collect ranges? Or just set condition if formatting rule?
-                            // "conditional_formatting" action is better for this.
-                            // IF explicitly asking to "highlight", we can use a conditional format rule for "Blanks".
+                            const highlightColor = getColor(action.color || "yellow");
 
                             if (action.condition === 'empty') {
                                 const cf = targetRange.conditionalFormats.add(Excel.ConditionalFormatType.containsBlanks);
@@ -370,10 +336,6 @@ const NaturalLanguageService = {
                                 const cf = targetRange.conditionalFormats.add(Excel.ConditionalFormatType.containsErrors);
                                 cf.containsErrors.format.fill.color = highlightColor;
                             } else if (action.condition === 'non-empty') {
-                                // Fallback for non-empty: Use CellValue NotEqual to empty string?
-                                // This is imperfect but safely executes without crashing using valid enums.
-                                // Alternatively, simply ignore or log warning since 'noBlanks' enum doesn't exist.
-                                // For now, let's omit the invalid branch to stop crashing.
                                 console.warn("Condition 'non-empty' is not directly supported via simple highlighted cells yet.");
                             }
                             break;
@@ -396,12 +358,148 @@ const NaturalLanguageService = {
                                 cf.cellValue.format.font.color = cfColor;
                                 cf.cellValue.rule = { formula1: action.value.toString(), operator: Excel.ConditionalCellValueOperator.greaterThan };
                             } else if (action.value === 'REORDER') {
-                                // Specific text rule
                                 const cf = targetRange.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
                                 cf.cellValue.format.font.bold = true;
                                 cf.cellValue.format.font.color = "red";
                                 cf.cellValue.rule = { formula1: `="${action.value}"`, operator: Excel.ConditionalCellValueOperator.equalTo };
                             }
+                            break;
+
+                        case 'generate_restaurant_report':
+                            // Load start position
+                            targetRange.load(["rowIndex", "columnIndex"]);
+                            await context.sync();
+                            const sr = targetRange.rowIndex;
+                            const sc = targetRange.columnIndex;
+
+                            // 1. TOP HEADER
+                            // Using relative coordinates (sr + offset, sc + offset)
+                            const titleRange = sheet.getRangeByIndexes(sr + 0, sc + 0, 1, 16);
+                            titleRange.merge(); // Merge FIRST
+                            // Fix: Assign to top-left cell of the merged range to avoid dimension mismatch
+                            titleRange.getCell(0, 0).values = [["RESTAURANT MONTHLY SALES REPORT TEMPLATE"]];
+                            titleRange.format.font.bold = true;
+                            titleRange.format.font.size = 20;
+
+                            // Inputs relative to start
+                            sheet.getRangeByIndexes(sr + 2, sc + 0, 1, 1).values = [["RESTAURANT NAME"]]; // A3
+                            sheet.getRangeByIndexes(sr + 2, sc + 4, 1, 1).values = [["DATES OF REPORT"]]; // E3
+                            sheet.getRangeByIndexes(sr + 4, sc + 0, 1, 1).values = [["ASSIGNED MANAGER"]]; // A5
+                            sheet.getRangeByIndexes(sr + 4, sc + 4, 1, 1).values = [["SIGNATURE"]];       // E5
+
+                            // Input boxes styling
+                            sheet.getRangeByIndexes(sr + 3, sc + 0, 1, 4).format.fill.color = "#F2F2F2"; // A4:D4
+                            sheet.getRangeByIndexes(sr + 3, sc + 4, 1, 4).format.fill.color = "#F2F2F2"; // E4:H4
+                            sheet.getRangeByIndexes(sr + 5, sc + 0, 1, 4).format.fill.color = "#F2F2F2"; // A6:D6
+                            sheet.getRangeByIndexes(sr + 5, sc + 4, 1, 4).format.fill.color = "#F2F2F2"; // E6:H6
+
+                            // 2. MONTHLY GRIDS
+                            const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+                            const items = ["Food", "Beverage (Non-Alcoholic)", "Spirits", "Beer (Bottled/Canned)", "Beer (Draft)", "Wine", "Other"];
+                            const discountItems = ["Customer Discounts", "Complimentary Items", "Employee Discounts", "Other"];
+
+                            const tableWidth = 4;
+                            const tableHeight = items.length + discountItems.length + 5;
+                            const gridStartRowRel = 8; // Row 9 (index 8) relative to start
+
+                            const monthlyTotalRefs = []; // Store R1C1 offsets for Annual Total
+                            // Annual Total cell will be at: Row = footerRow + 1, Col = sc + 6
+                            // We need to calculate footerRow first to know the relative offsets?
+                            // No, we can calculate footerRow safely now (const)
+                            const footerRow = sr + gridStartRowRel + (3 * (tableHeight + 2)) + 2;
+                            const annualTotalRow = footerRow + 1;
+                            const annualTotalCol = sc + 6;
+
+                            for (let i = 0; i < 12; i++) {
+                                const rowPos = Math.floor(i / 4);
+                                const colPos = i % 4;
+                                const originR = sr + gridStartRowRel + (rowPos * (tableHeight + 2));
+                                const originC = sc + (colPos * tableWidth);
+
+                                // Header
+                                const headerRange = sheet.getRangeByIndexes(originR, originC, 1, tableWidth);
+                                headerRange.values = [[months[i], "", "", ""]];
+                                headerRange.merge();
+                                headerRange.format.fill.color = "#FFC000";
+                                headerRange.format.font.bold = true;
+                                headerRange.format.horizontalAlignment = "Center";
+
+                                // Items
+                                const itemsStart = originR + 1;
+                                for (let j = 0; j < items.length; j++) {
+                                    sheet.getRangeByIndexes(itemsStart + j, originC, 1, 1).values = [[items[j]]];
+                                    sheet.getRangeByIndexes(itemsStart + j, originC + 2, 1, 1).values = [["$"]];
+                                }
+
+                                // Discounts Header
+                                const discountHeaderR = itemsStart + items.length;
+                                const discHeaderRange = sheet.getRangeByIndexes(discountHeaderR, originC, 1, tableWidth);
+                                discHeaderRange.values = [["DISCOUNTS AND COMPS", "", "", ""]];
+                                discHeaderRange.format.font.size = 8;
+                                discHeaderRange.format.fill.color = "#F2F2F2";
+
+                                // Discount Items
+                                const discountsStart = discountHeaderR + 1;
+                                for (let k = 0; k < discountItems.length; k++) {
+                                    sheet.getRangeByIndexes(discountsStart + k, originC, 1, 1).values = [[discountItems[k]]];
+                                    sheet.getRangeByIndexes(discountsStart + k, originC + 2, 1, 1).values = [["$"]];
+                                }
+
+                                // Total Row
+                                const totalR = discountsStart + discountItems.length;
+                                sheet.getRangeByIndexes(totalR, originC, 1, 1).values = [["TOTAL"]];
+                                const totalRange = sheet.getRangeByIndexes(totalR, originC, 1, 4);
+                                totalRange.format.fill.color = "#333333";
+                                totalRange.format.font.color = "white";
+                                totalRange.format.font.bold = true;
+
+                                // Insert Formula: SUM of rows above (Items + Discounts)
+                                // Range starts at itemsStart (relative) and ends one row above totalR
+                                const rowsToSum = totalR - itemsStart;
+                                sheet.getRangeByIndexes(totalR, originC + 2, 1, 1).formulasR1C1 = [[`=SUM(R[-${rowsToSum}]C:R[-1]C)`]];
+
+                                // Calculate R1C1 offset relative to Annual Total Cell
+                                const rOffset = totalR - annualTotalRow;
+                                const cOffset = (originC + 2) - annualTotalCol;
+                                monthlyTotalRefs.push(`R[${rOffset}]C[${cOffset}]`);
+                            }
+
+                            // 3. FINAL FOOTER
+                            const paymentsRange = sheet.getRangeByIndexes(footerRow, sc + 0, 1, 5);
+                            paymentsRange.values = [["PAYMENTS", "", "", "", ""]]; // Fixed dimension
+                            paymentsRange.format.font.size = 14;
+
+                            const methodList = ["MASTERCARD", "VISA", "DISCOVER", "AMEX", "CASH DEPOSIT", "REDEEMED GIFT CERTIFICATE", "TOTAL"];
+                            for (let m = 0; m < methodList.length; m++) {
+                                const r = footerRow + 1 + m;
+                                const methodRange = sheet.getRangeByIndexes(r, sc + 0, 1, 2);
+                                methodRange.values = [[methodList[m], ""]];
+                                methodRange.merge();
+                                methodRange.format.fill.color = (methodList[m] === "TOTAL") ? "#333333" : "#7F9DB9";
+                                methodRange.format.font.color = "white";
+                                methodRange.format.horizontalAlignment = "Right";
+
+                                sheet.getRangeByIndexes(r, sc + 2, 1, 1).values = [["$"]];
+
+                                if (methodList[m] === "TOTAL") {
+                                    // Sum the payment methods above
+                                    const rowsToSum = methodList.length - 1;
+                                    sheet.getRangeByIndexes(r, sc + 3, 1, 1).formulasR1C1 = [[`=SUM(R[-${rowsToSum}]C:R[-1]C)`]];
+                                } else {
+                                    sheet.getRangeByIndexes(r, sc + 3, 1, 1).values = [["-"]];
+                                }
+                            }
+
+                            // Annual Total
+                            const annualTotalRange = sheet.getRangeByIndexes(footerRow, sc + 6, 1, 4);
+                            annualTotalRange.values = [["ANNUAL TOTAL", "", "", ""]];
+
+                            const annualValRange = sheet.getRangeByIndexes(footerRow + 1, sc + 6, 1, 4);
+                            // Robust Formula: SUM(ref1, ref2, ref3...) containing all 12 monthly totals
+                            const annualSumFormula = `=SUM(${monthlyTotalRefs.join(",")})`;
+                            annualValRange.formulasR1C1 = [[annualSumFormula, "", "", ""]];
+                            annualValRange.format.fill.color = "#D9D9D9";
+                            annualValRange.format.font.size = 14;
                             break;
 
                         default:
@@ -413,7 +511,7 @@ const NaturalLanguageService = {
                     console.warn(`Failed to execute action ${actionType}:`, innerError);
                     errorMessages.push(`${actionType}: ${innerError.message}`);
                 }
-            } // end for loop
+            }
             await context.sync();
         });
 

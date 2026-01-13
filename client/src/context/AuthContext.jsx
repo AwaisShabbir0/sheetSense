@@ -1,4 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { auth, db, googleProvider } from '../firebase';
+import {
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signInWithPopup,
+    signOut,
+    onAuthStateChanged,
+    updateProfile as updateFirebaseProfile
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
 const AuthContext = createContext();
 
@@ -12,73 +22,123 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Check for saved user in local storage on load
-        const savedUser = localStorage.getItem('sheetSense_user');
-        if (savedUser) {
-            setUser(JSON.parse(savedUser));
-            setIsAuthenticated(true);
-        }
-        setLoading(false);
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            if (firebaseUser) {
+                // User is signed in, fetch additional data from Firestore
+                try {
+                    const userDocRef = doc(db, 'users', firebaseUser.uid);
+                    const userDoc = await getDoc(userDocRef);
+
+                    if (userDoc.exists()) {
+                        setUser({ ...firebaseUser, ...userDoc.data() });
+                    } else {
+                        // Fallback if firestore doc doesn't exist (shouldn't happen on normal flow)
+                        setUser(firebaseUser);
+                    }
+                    setIsAuthenticated(true);
+                } catch (error) {
+                    console.error("Error fetching user data:", error);
+                    // Still set the user, just minimal info
+                    setUser(firebaseUser);
+                    setIsAuthenticated(true);
+                }
+            } else {
+                // User is signed out
+                setUser(null);
+                setIsAuthenticated(false);
+            }
+            setLoading(false);
+        });
+
+        // Cleanup subscription on unmount
+        return () => unsubscribe();
     }, []);
 
     const login = async (email, password) => {
-        // Mock login
-        return new Promise((resolve, reject) => {
-            setTimeout(() => {
-                if (email && password) {
-                    const mockUser = {
-                        name: 'Excel Wizard',
-                        email: email,
-                        avatar: 'https://ui-avatars.com/api/?name=Excel+Wizard&background=00FF94&color=000'
-                    };
-                    setUser(mockUser);
-                    setIsAuthenticated(true);
-                    localStorage.setItem('sheetSense_user', JSON.stringify(mockUser));
-                    resolve(mockUser);
-                } else {
-                    reject(new Error('Invalid credentials'));
-                }
-            }, 1000);
-        });
+        return signInWithEmailAndPassword(auth, email, password);
     };
 
     const signup = async (name, email, password) => {
-        // Mock signup
-        return new Promise((resolve, reject) => {
-            setTimeout(() => {
-                const mockUser = {
-                    name: name,
-                    email: email,
-                    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=00FF94&color=000`
-                };
-                // For signup, we usually log them in automatically or ask to sign in.
-                // Here we'll just log them in.
-                setUser(mockUser);
-                setIsAuthenticated(true);
-                localStorage.setItem('sheetSense_user', JSON.stringify(mockUser));
-                resolve(mockUser);
-            }, 1000);
+        // 1. Create user in Firebase Auth
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // 2. Update Firebase Auth profile
+        const photoURL = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=00FF94&color=000`;
+        await updateFirebaseProfile(user, {
+            displayName: name,
+            photoURL: photoURL
         });
+
+        // 3. Create user document in Firestore
+        await setDoc(doc(db, 'users', user.uid), {
+            uid: user.uid,
+            name: name,
+            email: email,
+            photoURL: photoURL,
+            createdAt: new Date().toISOString()
+        });
+
+        return user;
+    };
+
+    const googleSignIn = async () => {
+        try {
+            const result = await signInWithPopup(auth, googleProvider);
+            const user = result.user;
+
+            // Check if user exists in Firestore
+            const userDocRef = doc(db, 'users', user.uid);
+            const userDoc = await getDoc(userDocRef);
+
+            if (!userDoc.exists()) {
+                // Determine display name (prefer displayName, fallback to email local part)
+                const displayName = user.displayName || user.email.split('@')[0];
+                const photoURL = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=00FF94&color=000`;
+
+                // Create user document
+                await setDoc(userDocRef, {
+                    uid: user.uid,
+                    name: displayName,
+                    email: user.email,
+                    photoURL: photoURL,
+                    createdAt: new Date().toISOString()
+                });
+            }
+
+            return user;
+        } catch (error) {
+            console.error("Error signing in with Google: ", error);
+            throw error;
+        }
     };
 
     const logout = () => {
-        setUser(null);
-        setIsAuthenticated(false);
-        localStorage.removeItem('sheetSense_user');
+        return signOut(auth);
     };
 
     const updateProfile = async (data) => {
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                const updatedUser = { ...user, ...data };
-                if (data.name) {
-                    updatedUser.avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name)}&background=00FF94&color=000`
-                }
-                setUser(updatedUser);
-                localStorage.setItem('sheetSense_user', JSON.stringify(updatedUser));
-                resolve(updatedUser);
-            }, 800);
-        });
+        if (!auth.currentUser) throw new Error('No user logged in');
+
+        const updates = {};
+        if (data.name) updates.displayName = data.name;
+
+        // Update Firebase Auth profile if any relevant fields changed
+        if (Object.keys(updates).length > 0) {
+            await updateFirebaseProfile(auth.currentUser, updates);
+        }
+
+        // Update Firestore document
+        // If name changed, update photoURL too if not provided explicitly
+        if (data.name && !data.photoURL) {
+            data.photoURL = `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name)}&background=00FF94&color=000`;
+        }
+
+        const userDocRef = doc(db, 'users', auth.currentUser.uid);
+        await updateDoc(userDocRef, data);
+
+        // Update local state manually to reflect changes immediately
+        setUser(prev => ({ ...prev, ...data }));
     };
 
     const value = {
@@ -86,6 +146,7 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated,
         login,
         signup,
+        googleSignIn,
         logout,
         updateProfile,
         loading

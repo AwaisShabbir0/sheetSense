@@ -32,7 +32,7 @@ const ContactSection = () => {
                     from_name: formData.name,
                     from_email: formData.email,
                     message: formData.message,
-                    to_name: "Awais Shabbir", // Optional: customize based on your template
+                    to_name: "SheetSense AI", // Optional: customize based on your template
                 },
                 PUBLIC_KEY
             );
@@ -82,10 +82,7 @@ const ContactSection = () => {
                                 icon={<Mail size={20} />}
                                 title="Email"
                                 content={
-                                    <>
-                                        <p>tahabutt5238@gmail.com</p>
-                                        <p>awaiskamboh0810@gmail.com</p>
-                                    </>
+                                    <p>sheetsense.ai@gmail.com</p>
                                 }
                                 delay={0.4}
                             />

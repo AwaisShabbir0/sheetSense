@@ -37,6 +37,7 @@ const PricingSection = () => {
                             "5 Sheets/mo",
                             "Community Support"
                         ]}
+                        buttonText="Free Plan"
                         delay={0.4}
                     />
                     <PricingCard
@@ -68,7 +69,15 @@ const PricingSection = () => {
     );
 };
 
-const PricingCard = ({ title, price, features, isPopular, delay }) => {
+const PricingCard = ({ title, price, features, isPopular, delay, buttonText = "Get Started" }) => {
+    const handleEmailClick = () => {
+        if (price === '$0') return;
+        const subject = `Request Access: ${title} Plan`;
+        const body = `Hi SheetSense Team,\n\nI would like to request access to the ${title} plan resources.\n\nThanks!`;
+        const mailtoLink = `mailto:sheetsense.ai@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        window.location.href = mailtoLink;
+    };
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 50 }}
@@ -76,8 +85,8 @@ const PricingCard = ({ title, price, features, isPopular, delay }) => {
             viewport={{ once: true }}
             transition={{ delay }}
             className={`relative w-full max-w-sm rounded-[32px] p-10 border transition-all duration-300 group hover:-translate-y-4 ${isPopular
-                    ? 'bg-[#A855F7]/5 border-[#A855F7]/30 hover:border-[#00FF94] hover:shadow-[0_20px_40px_-10px_rgba(0,255,148,0.1)]'
-                    : 'bg-white/[0.03] border-white/10 hover:border-white/30'
+                ? 'bg-[#A855F7]/5 border-[#A855F7]/30 hover:border-[#00FF94] hover:shadow-[0_20px_40px_-10px_rgba(0,255,148,0.1)]'
+                : 'bg-white/[0.03] border-white/10 hover:border-white/30'
                 }`}
         >
             {isPopular && (
@@ -104,12 +113,13 @@ const PricingCard = ({ title, price, features, isPopular, delay }) => {
             </ul>
 
             <button
+                onClick={handleEmailClick}
                 className={`w-full py-4 rounded-2xl font-bold transition-colors ${isPopular
-                        ? 'bg-[#00FF94] text-black hover:bg-[#00CC76]'
-                        : 'bg-white/10 text-white hover:bg-white/20'
+                    ? 'bg-[#00FF94] text-black hover:bg-[#00CC76]'
+                    : 'bg-white/10 text-white hover:bg-white/20'
                     }`}
             >
-                Get Started
+                {buttonText}
             </button>
         </motion.div>
     );

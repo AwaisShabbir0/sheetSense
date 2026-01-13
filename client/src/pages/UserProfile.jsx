@@ -53,13 +53,11 @@ const UserProfile = () => {
 
                         <div className="bg-surface border border-white/10 rounded-2xl p-8">
                             <div className="flex items-center gap-4 mb-8">
-                                <img
-                                    src={user?.avatar}
-                                    alt={user?.name}
-                                    className="w-16 h-16 rounded-full border-2 border-primary"
-                                />
+                                <div className="w-16 h-16 rounded-full border-2 border-primary bg-white/5 flex items-center justify-center">
+                                    <User className="w-8 h-8 text-white/60" />
+                                </div>
                                 <div>
-                                    <h1 className="text-2xl font-bold font-outfit">Profile Settings</h1>
+                                    <h1 className="text-2xl font-bold font-outfit">My Profile</h1>
                                     <p className="text-white/60">Manage your account information</p>
                                 </div>
                             </div>

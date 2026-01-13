@@ -104,11 +104,9 @@ const Navbar = () => {
                                 onClick={() => setIsProfileOpen(!isProfileOpen)}
                                 className="flex items-center gap-3 hover:bg-white/5 px-3 py-2 rounded-lg transition-colors"
                             >
-                                <img
-                                    src={user?.avatar}
-                                    alt={user?.name}
-                                    className="w-8 h-8 rounded-full border border-primary"
-                                />
+                                <div className="w-8 h-8 rounded-full border border-primary bg-white/5 flex items-center justify-center">
+                                    <User className="w-4 h-4 text-white" />
+                                </div>
                                 <span className="font-medium text-sm">{user?.name}</span>
                                 <ChevronDown className={`w-4 h-4 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
                             </button>
@@ -134,12 +132,7 @@ const Navbar = () => {
                                                 <User className="w-4 h-4" />
                                                 Profile
                                             </RouterLink>
-                                            <button
-                                                className="w-full flex items-center gap-3 p-3 text-sm text-gray-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-left"
-                                            >
-                                                <Settings className="w-4 h-4" />
-                                                Settings
-                                            </button>
+
                                             <div className="h-px bg-white/10 my-1" />
                                             <button
                                                 onClick={handleLogout}
@@ -186,11 +179,9 @@ const Navbar = () => {
                         <div className="p-6 flex flex-col gap-4">
                             {isAuthenticated && (
                                 <div className="flex items-center gap-4 p-4 bg-white/5 rounded-xl mb-2">
-                                    <img
-                                        src={user?.avatar}
-                                        alt={user?.name}
-                                        className="w-10 h-10 rounded-full border border-primary"
-                                    />
+                                    <div className="w-10 h-10 rounded-full border border-primary bg-white/5 flex items-center justify-center">
+                                        <User className="w-5 h-5 text-white" />
+                                    </div>
                                     <div>
                                         <p className="font-semibold text-white">{user?.name}</p>
                                         <RouterLink
