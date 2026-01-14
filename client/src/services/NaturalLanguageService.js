@@ -15,6 +15,44 @@ function getColor(colorName) {
     return colors[colorName.toLowerCase()] || colorName;
 }
 
+/**
+ * Batch analyze sentiment using Groq API.
+ * @param {string[]} texts - Array of strings to analyze.
+ * @returns {Promise<string[]>} - Array of "Positive", "Neutral", "Negative".
+ */
+async function analyzeSentimentBatch(texts) {
+    if (!texts || texts.length === 0) return [];
+
+    const prompt = `Classify the sentiment of each of the following texts as "Positive", "Neutral", or "Negative".
+    Return ONLY a JSON object with a key "sentiments" containing an array of strings matching the order of input.
+    Input Texts: ${JSON.stringify(texts)}`;
+
+    try {
+        const response = await fetch(`${BASE_URL}/chat/completions`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${GROQ_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: "llama-3.3-70b-versatile",
+                messages: [{ role: "user", content: prompt }],
+                response_format: { type: "json_object" },
+                temperature: 0
+            })
+        });
+
+        if (!response.ok) throw new Error("API Request Failed");
+
+        const data = await response.json();
+        const content = JSON.parse(data.choices[0].message.content);
+        return content.sentiments || Array(texts.length).fill("Neutral");
+    } catch (error) {
+        console.error("Sentiment Analysis Failed:", error);
+        return Array(texts.length).fill("Neutral"); // Fallback
+    }
+}
+
 const ACTION_SCHEMA = `
 You are an AI assistant for Microsoft Excel. Your job is to translate user requests into JSON actions that can be executed by the Excel Add-in.
 
@@ -36,6 +74,8 @@ Supported Actions:
 5. **highlight_cells** (range, condition: "empty"|"non-empty"|"errors", color)
    - Use this to highlight specific cells based on content.
 6. **conditional_formatting** (range, rule, value, color)
+7. **selectRange** (address)
+   - Use this to change the active selection.
 `;
 
 const NaturalLanguageService = {
@@ -43,7 +83,7 @@ const NaturalLanguageService = {
     /**
      * Process voice command audio blob.
      */
-    processVoiceCommand: async (audioBlob) => {
+    processVoiceCommand: async (audioBlob, history = []) => {
         try {
             const formData = new FormData();
             formData.append("file", audioBlob, "command.wav");
@@ -71,7 +111,8 @@ const NaturalLanguageService = {
                 return { text: "I couldn't hear any command.", actions: [] };
             }
 
-            return await NaturalLanguageService.processCommand(userCommand);
+            const result = await NaturalLanguageService.processCommand(userCommand, history);
+            return { ...result, userText: userCommand };
 
         } catch (error) {
             console.error("Voice Processing Error:", error);
@@ -92,7 +133,10 @@ const NaturalLanguageService = {
     /**
      * Process a natural language command text.
      */
-    processCommand: async (command) => {
+    /**
+     * Process a natural language command text.
+     */
+    processCommand: async (command, history = []) => {
         try {
             let contextInfo = "No selection info.";
             try {
@@ -124,12 +168,16 @@ const NaturalLanguageService = {
                 systemPrompt += `\n\nTask Library: I have access to a library of standard Excel tasks (Reporting, Analysis, Cleaning). If the user request implies one of these, execute the standard procedure.`;
             }
 
+            const messages = [
+                { role: "system", content: systemPrompt },
+                // Inject history
+                ...history.map(msg => ({ role: msg.type === 'user' ? 'user' : 'assistant', content: msg.text })),
+                { role: "user", content: `Context: ${contextInfo}\nUser Request: ${command}` }
+            ];
+
             const payload = {
                 model: "llama-3.3-70b-versatile",
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: `Context: ${contextInfo}\nUser Request: ${command}` }
-                ],
+                messages: messages,
                 response_format: { type: "json_object" },
                 temperature: 0.1
             };
@@ -500,6 +548,89 @@ const NaturalLanguageService = {
                             annualValRange.formulasR1C1 = [[annualSumFormula, "", "", ""]];
                             annualValRange.format.fill.color = "#D9D9D9";
                             annualValRange.format.font.size = 14;
+                            break;
+
+                        case 'analyze_sentiment':
+                            // 1. Get Text from Selection
+                            targetRange.load(["values", "rowCount", "columnCount", "rowIndex", "columnIndex"]);
+                            await context.sync();
+
+                            // Flatten to 1D array for API
+                            const textsToAnalyze = [];
+                            targetRange.values.forEach(row => {
+                                row.forEach(cell => {
+                                    if (cell) textsToAnalyze.push(String(cell));
+                                    else textsToAnalyze.push("");
+                                });
+                            });
+
+                            // 2. Call AI
+                            const sentiments = await analyzeSentimentBatch(textsToAnalyze);
+
+                            // 3. Write Sentiments to Next Column
+                            const sentimentColIndex = targetRange.columnIndex + targetRange.columnCount;
+
+                            // Header (if there is space above, else just write values)
+                            if (targetRange.rowIndex > 0) {
+                                const headerCell = sheet.getRangeByIndexes(targetRange.rowIndex - 1, sentimentColIndex, 1, 1);
+                                headerCell.values = [["Sentiment"]];
+                                headerCell.format.font.bold = true;
+                            }
+
+                            // Reshape sentiments back to match target dimensions (assuming 1D col output for 1D input usually)
+                            // But usually users select a column. We output a column next to it.
+                            const sentimentValues = [];
+                            let k = 0;
+                            for (let r = 0; r < targetRange.rowCount; r++) {
+                                const rowVal = [];
+                                for (let c = 0; c < targetRange.columnCount; c++) {
+                                    rowVal.push(sentiments[k] || "");
+                                    k++;
+                                }
+                                sentimentValues.push(rowVal);
+                            }
+
+                            const sentimentRange = sheet.getRangeByIndexes(targetRange.rowIndex, sentimentColIndex, targetRange.rowCount, targetRange.columnCount);
+                            sentimentRange.values = sentimentValues;
+
+                            // 4. Formatting
+                            const cfPositive = sentimentRange.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
+                            cfPositive.cellValue.rule = { formula1: "=\"Positive\"", operator: Excel.ConditionalCellValueOperator.equalTo };
+                            cfPositive.cellValue.format.font.color = "#006100";
+                            cfPositive.cellValue.format.fill.color = "#C6EFCE";
+
+                            const cfNegative = sentimentRange.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
+                            cfNegative.cellValue.rule = { formula1: "=\"Negative\"", operator: Excel.ConditionalCellValueOperator.equalTo };
+                            cfNegative.cellValue.format.font.color = "#9C0006";
+                            cfNegative.cellValue.format.fill.color = "#FFC7CE";
+
+                            // 5. Summary & Chart
+                            const summaryCol = sentimentColIndex + targetRange.columnCount + 1; // Gap of 1 column
+                            const summaryRange = sheet.getRangeByIndexes(targetRange.rowIndex, summaryCol, 4, 2);
+
+                            sentimentRange.load("address");
+                            await context.sync();
+                            const sAddr = sentimentRange.address;
+
+                            summaryRange.values = [
+                                ["Sentiment", "Count"],
+                                ["Positive", `=COUNTIF(${sAddr}, "Positive")`],
+                                ["Neutral", `=COUNTIF(${sAddr}, "Neutral")`],
+                                ["Negative", `=COUNTIF(${sAddr}, "Negative")`]
+                            ];
+                            summaryRange.getUsedRange().format.autofitColumns();
+
+                            const sentimentChart = sheet.charts.add(Excel.ChartType.pie, summaryRange, Excel.ChartSeriesBy.columns);
+                            sentimentChart.title.text = "Sentiment Overview";
+                            sentimentChart.left = 400;
+                            sentimentChart.top = 100;
+                            break;
+
+                        case 'selectRange':
+                            // Simply selecting the range is enough as targetRange.select() is implied
+                            // However, in Excel JS, "getting" the range doesn't select it.
+                            // We need to explicitly call .select()
+                            targetRange.select();
                             break;
 
                         default:

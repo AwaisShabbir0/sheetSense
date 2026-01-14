@@ -6,7 +6,8 @@ import {
     signInWithPopup,
     signOut,
     onAuthStateChanged,
-    updateProfile as updateFirebaseProfile
+    updateProfile as updateFirebaseProfile,
+    signInAnonymously
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
@@ -141,12 +142,22 @@ export const AuthProvider = ({ children }) => {
         setUser(prev => ({ ...prev, ...data }));
     };
 
+    const loginAnonymously = async () => {
+        try {
+            await signInAnonymously(auth);
+        } catch (error) {
+            console.error("Error signing in anonymously:", error);
+            throw error;
+        }
+    };
+
     const value = {
         user,
         isAuthenticated,
         login,
         signup,
         googleSignIn,
+        loginAnonymously,
         logout,
         updateProfile,
         loading

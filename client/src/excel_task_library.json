@@ -542,5 +542,24 @@
         "instruction": "Execute the 'generate_restaurant_report' action. Return: { 'type': 'generate_restaurant_report', 'address': 'TARGET_CELL' } where TARGET_CELL is the user-specified cell (e.g. 'A39') or null if not specified."
       }
     ]
+  },
+  {
+    "task_id": "ai_sentiment_001",
+    "task_name": "AI Sentiment Analysis Dashboard",
+    "command_example": "Analyze sentiment for these customer reviews",
+    "intent_category": "AI_ANALYSIS",
+    "complexity": "Advanced",
+    "description": "Uses AI to analyze the sentiment of selected text, adds a sentiment score column, and visualizes the results.",
+    "target_audience": "Business",
+    "required_columns": [
+      "Review Text"
+    ],
+    "actions": [
+      {
+        "step": 1,
+        "type": "analyze_sentiment",
+        "instruction": "Execute the 'analyze_sentiment' action on the selected range."
+      }
+    ]
   }
 ]

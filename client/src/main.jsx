@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import TaskPane from './components/TaskPane.jsx'
+import { AuthProvider } from './context/AuthContext'
 import './index.css'
 
 /* global Office */
@@ -45,7 +46,11 @@ const Root = () => {
     }
 
     if (isExcel) {
-        return <TaskPane />;
+        return (
+            <AuthProvider>
+                <TaskPane />
+            </AuthProvider>
+        );
     }
 
     return <App />;
